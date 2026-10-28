@@ -1,0 +1,31 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+*.swp
+*.swo
+*~
+.idea/
+
+# Dependencies / build output (not used by this repo, kept for safety)
+node_modules/
+dist/
+coverage/
+
+# Local environment and secrets — never commit these
+.env
+.env.*
+*.local
+*.key
+
+# OpenCode local state and credentials — a live config must never be committed;
+# this repo only ships the sanitized opencode.example.json
+opencode.json
+opencode.jsonc
+auth.json
+credentials.json
+service.json
+
+# Logs
+*.log

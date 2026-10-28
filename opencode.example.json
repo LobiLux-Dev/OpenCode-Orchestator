@@ -1,0 +1,203 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "build",
+  "mcp": {
+    "servers": {}
+  },
+  "agents": {
+    "build": {
+      "model": {
+        "providerID": "opencode-go",
+        "model": "deepseek-v4.1-flash",
+        "variant": "low"
+      }
+    },
+    "plan": {
+      "model": {
+        "providerID": "opencode-go",
+        "model": "deepseek-v4.1-flash",
+        "variant": "high"
+      }
+    },
+    "orchestrator": {
+      "permissions": [
+        {
+          "action": "subagent",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "subagent",
+          "resource": "general",
+          "effect": "allow"
+        },
+        {
+          "action": "subagent",
+          "resource": "explore",
+          "effect": "allow"
+        },
+        {
+          "action": "subagent",
+          "resource": "tester",
+          "effect": "allow"
+        },
+        {
+          "action": "subagent",
+          "resource": "reviewer",
+          "effect": "allow"
+        },
+        {
+          "action": "subagent",
+          "resource": "architect",
+          "effect": "allow"
+        },
+        {
+          "action": "subagent",
+          "resource": "reviewer-critical",
+          "effect": "allow"
+        },
+        {
+          "action": "subagent",
+          "resource": "ui-designer",
+          "effect": "allow"
+        },
+        {
+          "action": "subagent",
+          "resource": "ui-builder",
+          "effect": "allow"
+        },
+        {
+          "action": "subagent",
+          "resource": "visual-qa",
+          "effect": "allow"
+        }
+      ]
+    },
+    "general": {
+      "model": {
+        "providerID": "opencode-go",
+        "model": "mimo-v2.6-flash"
+      }
+    },
+    "explore": {
+      "model": {
+        "providerID": "opencode-go",
+        "model": "mimo-v2.6-flash"
+      }
+    },
+    "reviewer": {
+      "model": {
+        "providerID": "opencode-go",
+        "model": "deepseek-v4.1-flash",
+        "variant": "high"
+      },
+      "permissions": [
+        {
+          "action": "edit",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "shell",
+          "resource": "*",
+          "effect": "deny"
+        }
+      ]
+    },
+    "architect": {
+      "model": {
+        "providerID": "openai",
+        "model": "gpt-6.1-sol",
+        "variant": "high"
+      },
+      "permissions": [
+        {
+          "action": "edit",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "shell",
+          "resource": "*",
+          "effect": "deny"
+        }
+      ]
+    },
+    "tester": {
+      "model": {
+        "providerID": "opencode-go",
+        "model": "mimo-v2.6-flash"
+      },
+      "permissions": [
+        {
+          "action": "edit",
+          "resource": "*",
+          "effect": "deny"
+        }
+      ]
+    },
+    "reviewer-critical": {
+      "model": {
+        "providerID": "openai",
+        "model": "gpt-6.1-terra",
+        "variant": "high"
+      },
+      "permissions": [
+        {
+          "action": "edit",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "shell",
+          "resource": "*",
+          "effect": "deny"
+        }
+      ]
+    },
+    "ui-designer": {
+      "model": {
+        "providerID": "openai",
+        "model": "gpt-6.1-terra",
+        "variant": "medium"
+      },
+      "permissions": [
+        {
+          "action": "edit",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "shell",
+          "resource": "*",
+          "effect": "deny"
+        }
+      ]
+    },
+    "ui-builder": {
+      "model": {
+        "providerID": "opencode-go",
+        "model": "mimo-v2.6-flash"
+      }
+    },
+    "visual-qa": {
+      "model": {
+        "providerID": "openai",
+        "model": "gpt-6-luna",
+        "variant": "high"
+      },
+      "permissions": [
+        {
+          "action": "edit",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "shell",
+          "resource": "*",
+          "effect": "deny"
+        }
+      ]
+    }
+  }
+}

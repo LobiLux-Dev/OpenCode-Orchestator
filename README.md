@@ -39,45 +39,123 @@ The roster is exactly the reference setup: 4 built-in OpenCode agents (configure
 
 ## Workflow
 
-Dotted arrows are **conditional**: the orchestrator delegates only where value is clear and handles small, localized work itself.
+This is a **decision flow, not a pipeline**: every gate is evaluated per task, most requests touch only a handful of nodes, and none of the delegations happen unless the matching gate says so. The orchestrator handles small, well-localized work itself and launches a subagent only where value is clear.
+
+### Decision flow
 
 ```mermaid
 flowchart TD
-    U([User request]) --> O[orchestrator<br/>scope, route, integrate, deliver]
-
-    O -->|small and well-localized| D[Handled directly<br/>no subagents launched]
-
-    O -.->|unknown code location| E[explore<br/>no edits (built-in)]
-    O -.->|scoped non-UI work| G[general<br/>implementation]
-    O -.->|architecture uncertainty| A[architect<br/>decision, no edit/shell]
-    O -.->|reproduce / run checks| T[tester<br/>optional; edit tools denied]
-    O -.->|material behavior change| R[reviewer<br/>optional, no edit/shell]
-    O -.->|serious security or data risk| RC[reviewer-critical<br/>optional, no edit/shell]
-
-    O -.->|substantial UI work| UD[ui-designer<br/>no edit/shell, only if direction unclear]
-    UD --> UB[ui-builder<br/>implements the brief]
-    O -.->|UI direction already clear| UB
-    UB --> EV{Rendered evidence<br/>available?}
-    EV -->|screenshots or running app| VQ[visual-qa<br/>no edit/shell, inspects rendered UI]
-    EV -->|no evidence, e.g. browser MCP disabled| NV[Visual review reported<br/>as NOT VERIFIED]
-
-    D --> I[Evaluate findings, fix, re-verify]
-    E --> I
-    G --> I
-    A --> I
-    T --> I
-    R --> I
-    RC --> I
-    VQ --> I
-    NV --> I
-    I --> F([Final report: changes, checks,<br/>actual evidence, open risks])
+    U([User request]) --> SC[Scope: objective, constraints,<br/>acceptance criteria, risks]
+    SC --> SMALL{"Small and well-localized?"}
+    SMALL -->|yes: question or explanation| ANS[Answer directly<br/>no change made]
+    ANS --> RPT
+    SMALL -->|yes: simple change| DIR[Handled directly<br/>no subagents launched]
+    DIR --> CHK
+    SMALL -->|no| LOC{"Unknown code locations<br/>or existing behavior?"}
+    LOC -->|yes| E[explore<br/>bounded search questions]
+    LOC -->|no| ARCH
+    E --> ARCH{"System-level uncertainty?<br/>boundaries, data model, complex migration,<br/>concurrency, security-sensitive design"}
+    ARCH -->|yes| A[architect<br/>decision or diagnosis, no edit/shell]
+    ARCH -->|no| IMP
+    A --> IMP{"Implementation route"}
+    IMP -->|scoped non-UI work| G[general<br/>bounded implementation]
+    IMP -->|UI plus backend/domain logic| BOTH[Coordinate non-overlapping scopes:<br/>general = backend/domain,<br/>ui-builder = presentation]
+    IMP -->|substantial UI, direction unclear| UD[ui-designer<br/>actionable design handoff]
+    IMP -->|substantial UI, direction clear| UB[ui-builder<br/>implements in the existing stack]
+    UD --> UB
+    BOTH --> G
+    BOTH --> UB
+    G --> CHK
+    UB --> CHK
+    CHK{"Smallest relevant checks pass?"}
+    CHK -->|fail| FN
+    CHK -->|pass| REP{"Reproduce an issue or run<br/>broader functional checks?"}
+    REP -->|yes| T[tester<br/>edit tools denied; shell unrestricted]
+    REP -->|no| REV
+    T --> REV{"Material behavior change or<br/>meaningful engineering risk?"}
+    REV -->|yes| R[reviewer<br/>independent routine review]
+    REV -->|no| VIS
+    R --> CRIT{"Defects would have serious security, privacy,<br/>financial, data-integrity, or operational<br/>consequences?"}
+    CRIT -->|yes: additional audit by impact<br/>and remaining uncertainty| RC[reviewer-critical<br/>additional independent audit]
+    CRIT -->|no| VIS
+    RC --> VIS{"Substantial visual change?"}
+    VIS -->|no| FN
+    VIS -->|yes| EV{"Rendered evidence available?<br/>screenshots, running app, preview"}
+    EV -->|yes| VQ[visual-qa<br/>assesses actual rendered evidence]
+    EV -->|no| NV[Visual review reported as<br/>NOT VERIFIED with manual path]
+    VQ --> FN
+    NV --> FN
+    FN{"Findings to address?"}
+    FN -->|no| DONE
+    FN -->|yes| FIX[Evaluate findings: fix BLOCKING,<br/>normally fix IMPORTANT, weigh OPTIONAL]
+    FIX --> RE[Re-run impacted checks,<br/>reinspect affected UI]
+    RE --> DONE
+    DONE{"Acceptance criteria met<br/>and evidence in hand?"}
+    DONE -->|no, attempts remain| RETRY[Next attempt: narrow the failure<br/>or change the approach]
+    RETRY --> IMP
+    DONE -->|no, same strategy failed twice| ESC[Stop repeating the same strategy]
+    ESC -->|gather new evidence| LOC
+    ESC -.->|structural uncertainty| A
+    DONE -->|yes| RPT([Final report: changes, checks,<br/>actual evidence, open risks])
 ```
+
+### Delegation topology
+
+A static map of the subagents the orchestrator may launch. The links mean *"may delegate to"*, not "then": they are drawn undirected only to avoid implying an order, but represent delegation from the orchestrator to those subagents. The role groupings are editorial labels; the config encodes a flat allowlist, not a hierarchy among subagents. `build` and `plan` retain their own default permissions. Nothing here implies priority or that any two subagents run together:
+
+```mermaid
+flowchart TB
+    subgraph PRIM["Primary agents — selected by the user per session"]
+        direction LR
+        B[build<br/>default coding agent]
+        P[plan<br/>planning and analysis]
+        O[orchestrator<br/>scope, route, verify, deliver]
+    end
+
+    subgraph ALLOW["Delegation allowlist — the nine subagents the orchestrator may launch"]
+        direction TB
+        subgraph GRPEX["Exploration"]
+            direction LR
+            E[explore]
+        end
+        subgraph GRPIMP["Implementation"]
+            direction LR
+            G[general]
+            UB[ui-builder]
+        end
+        subgraph GRPDES["Architecture and design"]
+            direction LR
+            A[architect]
+            UD[ui-designer]
+        end
+        subgraph GRPQA["Verification and review"]
+            direction LR
+            T[tester]
+            R[reviewer]
+            RC[reviewer-critical]
+            VQ[visual-qa]
+        end
+    end
+
+    O -.- E
+    O -.- G
+    O -.- UB
+    O -.- A
+    O -.- UD
+    O -.- T
+    O -.- R
+    O -.- RC
+    O -.- VQ
+```
+
+`build` and `plan` are separate **primary** agents: sessions start in one of them, and the orchestrator never delegates to them. The allowlist is enforced in config (`subagent *` denied, then exactly these nine allowed — see [Security](#security)); it cannot spawn anything else.
 
 Ground rules, taken from the agent prompts themselves:
 
-- **Delegation is not reflexive.** Questions, simple edits, and one-off fixes are handled directly by the orchestrator.
-- **`tester` and reviews are optional**, chosen by impact and remaining uncertainty. `reviewer` and `reviewer-critical` are never both launched automatically for routine edits.
+- **Delegation is not reflexive.** Questions, simple explanations, and one-off fixes are handled directly by the orchestrator — an answer-only request exits straight to the final report, with no verification loop to run.
+- **`tester` and reviews are impact-based options**, chosen by impact and remaining uncertainty. `reviewer-critical` is an *additional* independent audit for high-consequence risk (serious security, privacy, financial, data-integrity, or operational consequences) — not a routine either/or swap for `reviewer` — and the two are never both launched automatically for routine edits.
 - **The UI track is sequential, not automatically parallel.** `visual-qa` inspects the result of `ui-builder`, so it runs after implementation. Only independent *read-only* investigations may run concurrently; concurrent edits to overlapping files are forbidden.
+- **Two failed attempts end the loop.** After two unsuccessful attempts with essentially the same strategy the orchestrator stops repeating it: it gathers new evidence, narrows the failure, or consults `architect` for structural issues. For repeated visual failures it first re-examines the design specification, actual screenshots, viewport/state coverage, and implementation differences — and uses `ui-designer` for visual-direction ambiguity, not `architect` by default.
 - **Honest evidence is mandatory.** No agent may claim a test passed, a screenshot was captured, or a review happened without evidence. If rendered evidence is unavailable (the reference setup ships the browser MCP server *disabled*), the workflow ends visual assessment at **"VISUAL REVIEW NOT VERIFIED"** with a manual verification path — never with a fabricated approval.
 
 ## Setup (OpenCode V2)
@@ -130,11 +208,45 @@ The example contains **no MCP servers, no machine-specific paths, and no credent
 
 ### 4. Keep `build` as the default; select the orchestrator per session
 
-The example (like the reference setup) sets `"default_agent": "build"`: new sessions still start in the built-in `build` agent, with the orchestrator available on demand. To use the orchestrator in a session, pick it from the agent selector with the **`/agents`** command, or cycle agents with **Shift+Tab** (keybind `agent_cycle_reverse`; see the OpenCode keybinds docs for the current defaults). If you want the orchestrator as the default instead, change `default_agent` to `"orchestrator"` — per the V2 docs this affects only sessions that have not yet selected an agent and does **not** change existing sessions.
+The example (like the reference setup) sets `"default_agent": "build"`: new sessions still start in the built-in `build` agent, with the orchestrator available on demand. To use the orchestrator in a session, pick it from the agent selector with the **`/agents`** command, or cycle agents forward with **Shift+Tab** (the `agent.cycle` keybind; see the official [keybinds docs](https://opencode.ai/v2/docs/cli/keybinds/) for the current defaults and how to rebind in `cli.json`). If you want the orchestrator as the default instead, change `default_agent` to `"orchestrator"` — per the V2 docs this affects only sessions that have not yet selected an agent and does **not** change existing sessions.
 
 ### 5. Optional: MCP servers
 
-Everything works without MCP. The reference setup used a local codebase-memory graph server and a browser-screenshot server; their machine-specific binary paths and credentials are deliberately excluded from this repository. If you want either capability, add your own server. Example (a browser tooling server, kept disabled until you authorize it):
+Everything in this workflow works without MCP. Two optional, third-party servers are worth considering — review each project's own documentation before adding it. This repository deliberately contains **no machine-specific binary paths, no credentials, and no API keys**: the server commands below resolve from your `PATH` (or via `npx`), and secrets belong in environment variables referenced as `{env:NAME}`, never written into committed config (per the [V2 MCP docs](https://opencode.ai/v2/docs/mcp-servers), verified 2026-10-28).
+
+#### `codebase-memory` (optional, recommended): local code knowledge graph
+
+[codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) indexes a repository into a persistent **local** knowledge graph — functions, classes, call chains, routes, dependencies, change impact — and exposes it as MCP tools. Indexing and queries run on your machine with no hosted service or API key. When the graph is available, agents are instructed to prefer it for code discovery; when it is unavailable or its results are incomplete, they fall back to grep/glob and say so. The workflow is fully functional either way — the graph makes `explore`-style work faster and cheaper, it is never a requirement.
+
+Install per the project's own documentation ([README](https://github.com/DeusData/codebase-memory-mcp#readme), verified 2026-10-28). The official installer detects OpenCode and does **more than write an MCP entry**: depending on client capabilities it may also create or edit `AGENTS.md`, install skills, register Scout/Verify/Auditor agent profiles, and add context hooks alongside the config change. **Back up the files you care about first** (the copy-and-backup discipline from step 2 applies here too), review what it wrote, or skip the installer entirely and configure the server manually with the JSON below. Afterward, ask an agent to *"Index this project"*:
+
+```sh
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/DeusData/codebase-memory-mcp/main/install.sh | bash
+```
+
+Windows PowerShell, manual archive, and package-manager variants (npm, PyPI, Homebrew, and others) are documented in the same README — `npm install -g codebase-memory-mcp` is the npm route.
+
+If you prefer to configure by hand instead of letting the installer write your config, add a `local` server entry pointing at the installed binary (it must be on your `PATH` — the installer's default directory is `~/.local/bin`):
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "codebase-memory": {
+        "type": "local",
+        "command": ["codebase-memory-mcp"]
+      }
+    }
+  }
+}
+```
+
+#### `chrome-devtools` (optional, disabled by default): rendered evidence for visual QA
+
+[chrome-devtools-mcp](https://github.com/ChromeDevTools/chrome-devtools-mcp) is the official Chrome DevTools MCP server: it drives a live Chrome instance so `visual-qa` can inspect **actual rendered pages** — screenshots, layout at different viewports, console and network state — instead of inferring appearance from source. It requires a Node.js LTS version and current stable Chrome ([requirements](https://github.com/ChromeDevTools/chrome-devtools-mcp#requirements)).
+
+Keep it **disabled until you deliberately authorize browser access**, and know the privacy-relevant defaults documented in the project README: the server exposes the browser instance's content to MCP clients; Google's usage-statistics collection is **enabled by default** (opt out with the `--no-usage-statistics` flag, e.g. `"command": ["npx", "-y", "chrome-devtools-mcp@latest", "--no-usage-statistics"]`); and performance tools may send trace URLs to Google's CrUX API for real-user experience data (opt out with `--no-performance-crux`). Valid OpenCode V2 configuration (schema per the [V2 MCP docs](https://opencode.ai/v2/docs/mcp-servers)):
 
 ```json
 {
@@ -150,15 +262,31 @@ Everything works without MCP. The reference setup used a local codebase-memory g
 }
 ```
 
-Agents degrade honestly without it: the prompts tell them to fall back to grep/glob when the code graph is unavailable, and to mark visual review **not verified** when no rendered evidence exists. Enabling an MCP server gives agents its tools — do it deliberately.
+`"disabled": true` keeps the server configured without connecting it; remove the field (or set it to `false`) when you want agents to have browser tools. Enabling an MCP server gives every agent its tools — do it deliberately, and note that the agents' own rules forbid them from enabling disabled servers or installing tools themselves.
+
+**Without rendered evidence, the workflow does not fake it.** Acceptable evidence for `visual-qa` includes browser-tool screenshots, user-provided screenshots of the running app, emulator/device captures, and framework previews. When none is available, the orchestrator performs the checks it can, reports **VISUAL REVIEW NOT VERIFIED**, and provides a reproducible manual verification path.
+
+#### Verify and troubleshoot
+
+See what OpenCode actually loaded (verified against opencode v2.2.0):
+
+```sh
+opencode mcp list
+```
+
+Each configured server appears with its state — for example `✓ … connected` or `○ … disabled`. If a server is missing from that list or will not connect:
+
+- **The command does not resolve.** Local servers are started as plain commands: `codebase-memory-mcp` must be on the `PATH` OpenCode inherits (the installer's default `~/.local/bin` is not on every shell's `PATH`), and `npx` needs a Node.js LTS install. As a last resort, put the absolute path to the binary in `command` on your machine — and keep it out of commits, per this repository's no-private-paths rule.
+- **The config edit is not visible.** Hand-edited `mcp.servers` entries live in whichever config OpenCode actually loads (global `~/.config/opencode/opencode.json` or a project config — `opencode debug config` prints the effective configuration); merge carefully. OpenCode watches config changes; use `/reload` to force a reload if needed.
+- **`disabled: true` is not a bug.** A server listed as `○ disabled` is configured but intentionally not connected — that is the recommended starting state for `chrome-devtools`.
 
 ### 6. Verify
 
 ```sh
-opencode agent list
+opencode debug agents
 ```
 
-You should see `orchestrator`, `architect`, `reviewer`, `reviewer-critical`, `tester`, `ui-designer`, `ui-builder`, and `visual-qa` alongside the built-ins.
+You should get a JSON list of every agent OpenCode sees; check that `orchestrator`, `architect`, `reviewer`, `reviewer-critical`, `tester`, `ui-designer`, `ui-builder`, and `visual-qa` appear alongside the built-ins. (Verified against opencode v2.2.0: there is **no** `opencode agent` subcommand — `opencode debug agents` is the listing command.) For the optional MCP layer, `opencode mcp list` shows each server's state; see [step 5](#5-optional-mcp-servers).
 
 ## Security
 
